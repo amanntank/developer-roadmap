@@ -5,7 +5,7 @@ import Footer from '../components/Footer.astro';
 import Navigation from '../components/Navigation/Navigation.astro';
 import OpenSourceBanner from '../components/OpenSourceBanner.astro';
 import { PageProgress } from '../components/PageProgress';
-import { PageSponsor,PageSponsorType } from '../components/PageSponsor';
+import { PageSponsor } from '../components/PageSponsor';
 import { siteConfig } from '../lib/config';
 import '../styles/global.css';
 
@@ -73,7 +73,7 @@ const gaPageIdentifier = Astro.url.pathname
     <meta http-equiv='Content-Language' content='en' />
 
     <meta name='twitter:card' content='summary_large_image' />
-    <meta name='twitter:creator' content='@kamranahmedse' />
+    <meta name='twitter:creator' content='@kamrify' />
 
     <meta property='og:image:width' content='1200' />
     <meta property='og:image:height' content='630' />
@@ -125,6 +125,9 @@ const gaPageIdentifier = Astro.url.pathname
 
     <link rel='icon' href='/manifest/favicon.ico' type='image/x-icon' />
 
+    <link rel='preconnect' href='https://www.google-analytics.com/' />
+    <link rel='preconnect' href='https://api.roadmap.sh/' />
+
     <slot name='after-header' />
     {
       jsonLd.length > 0 && (
@@ -144,11 +147,15 @@ const gaPageIdentifier = Astro.url.pathname
       <Footer />
     </slot>
 
-    <Analytics />
     <Authenticator />
     <PageProgress client:idle />
-    <PageSponsor gaPageIdentifier={briefTitle || gaPageIdentifier} client:idle />
+    <PageSponsor
+      gaPageIdentifier={briefTitle || gaPageIdentifier}
+      client:load
+    />
 
     <slot name='after-footer' />
+
+    <Analytics />
   </body>
 </html>
