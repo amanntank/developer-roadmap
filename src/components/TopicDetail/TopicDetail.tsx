@@ -1,8 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import CheckIcon from '../../icons/check.svg';
+import { useMemo, useRef, useState } from 'preact/hooks';
 import CloseIcon from '../../icons/close.svg';
-import ProgressIcon from '../../icons/progress.svg';
-import ResetIcon from '../../icons/reset.svg';
 import SpinnerIcon from '../../icons/spinner.svg';
 
 import { useKeydown } from '../../hooks/use-keydown';
@@ -12,23 +9,22 @@ import { useToggleTopic } from '../../hooks/use-toggle-topic';
 import { httpGet } from '../../lib/http';
 import { isLoggedIn } from '../../lib/jwt';
 import {
-  getTopicStatus,
   isTopicDone,
   renderTopicProgress,
-  ResourceProgressType,
   ResourceType,
   updateResourceProgress as updateResourceProgressApi,
 } from '../../lib/resource-progress';
-import { pageLoadingMessage, sponsorHidden } from '../../stores/page';
+import { pageProgressMessage, sponsorHidden } from '../../stores/page';
+import { TopicProgressButton } from './TopicProgressButton';
+import { ContributionForm } from './ContributionForm';
 
 export function TopicDetail() {
+  const [contributionAlertMessage, setContributionAlertMessage] = useState('');
   const [isActive, setIsActive] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isContributing, setIsContributing] = useState(false);
   const [error, setError] = useState('');
   const [topicHtml, setTopicHtml] = useState('');
-
-  const [progress, setProgress] = useState<ResourceProgressType>('pending');
-  const [isUpdatingProgress, setIsUpdatingProgress] = useState(true);
 
   const isGuest = useMemo(() => !isLoggedIn(), []);
   const topicRef = useRef<HTMLDivElement>(null);
@@ -52,52 +48,15 @@ export function TopicDetail() {
     }
   };
 
-  const handleUpdateResourceProgress = (progress: ResourceProgressType) => {
-    setIsUpdatingProgress(true);
-    updateResourceProgressApi(
-      {
-        topicId,
-        resourceId,
-        resourceType,
-      },
-      progress
-    )
-      .then(() => {
-        setProgress(progress);
-        setIsActive(false);
-        renderTopicProgress(topicId, progress);
-      })
-      .catch((err) => {
-        alert(err.message);
-        console.error(err);
-      })
-      .finally(() => {
-        setIsUpdatingProgress(false);
-      });
-  };
-
-  // Load the topic status when the topic detail is active
-  useEffect(() => {
-    if (!topicId || !resourceId || !resourceType) {
-      return;
-    }
-
-    setIsUpdatingProgress(true);
-    getTopicStatus({ topicId, resourceId, resourceType })
-      .then((status) => {
-        setIsUpdatingProgress(false);
-        setProgress(status);
-      })
-      .catch(console.error);
-  }, [topicId, resourceId, resourceType]);
-
   // Close the topic detail when user clicks outside the topic detail
   useOutsideClick(topicRef, () => {
     setIsActive(false);
+    setIsContributing(false);
   });
 
   useKeydown('Escape', () => {
     setIsActive(false);
+    setIsContributing(false);
   });
 
   // Toggle topic is available even if the component UI is not active
@@ -109,7 +68,7 @@ export function TopicDetail() {
       return;
     }
 
-    pageLoadingMessage.set('Updating');
+    pageProgressMessage.set('Updating');
 
     // Toggle the topic status
     isTopicDone({ topicId, resourceId, resourceType })
@@ -134,7 +93,7 @@ export function TopicDetail() {
         console.error(err);
       })
       .finally(() => {
-        pageLoadingMessage.set('');
+        pageProgressMessage.set('');
       });
   });
 
@@ -144,6 +103,7 @@ export function TopicDetail() {
     setIsActive(true);
     sponsorHidden.set(true);
 
+    setContributionAlertMessage('');
     setTopicId(topicId);
     setResourceType(resourceType);
     setResourceId(resourceId);
@@ -187,9 +147,6 @@ export function TopicDetail() {
     return null;
   }
 
-  const contributionDir = resourceType === 'roadmap' ? 'roadmaps' : 'best-practices';
-  const contributionUrl = `https://github.com/kamranahmedse/developer-roadmap/tree/master/src/data/${contributionDir}/${resourceId}/content`;
-
   return (
     <div>
       <div
@@ -206,99 +163,44 @@ export function TopicDetail() {
           </div>
         )}
 
-        {!isLoading && !error && (
+        {!isLoading && isContributing && (
+          <ContributionForm
+            resourceType={resourceType}
+            resourceId={resourceId}
+            topicId={topicId}
+            onClose={(message?: string) => {
+              if (message) {
+                setContributionAlertMessage(message);
+              }
+
+              setIsContributing(false);
+            }}
+          />
+        )}
+
+        {!isContributing && !isLoading && !error && (
           <>
             {/* Actions for the topic */}
             <div className="mb-2">
-              {isGuest && (
-                <div className="flex items-center gap-2">
-                  <button
-                    data-popup="login-popup"
-                    className="inline-flex items-center rounded-md bg-green-600 p-1 px-2 text-sm text-white hover:bg-green-700"
-                    onClick={() => setIsActive(false)}
-                  >
-                    <img alt="Check" class="w-3" src={CheckIcon} />
-                    <span className="ml-2">Done</span>
-                  </button>
-                  <button
-                    data-popup="login-popup"
-                    className="inline-flex items-center rounded-md bg-[#dad1fd] p-1 px-2 text-sm text-[#0E033B] hover:bg-[#C4B6FC]"
-                    onClick={() => setIsActive(false)}
-                  >
-                    <img alt="Learning" class="w-4" src={ProgressIcon} />
-                    <span className="ml-2">In Progress</span>
-                  </button>
-                </div>
-              )}
-
-              {!isGuest && (
-                <>
-                  {isUpdatingProgress && (
-                    <button className="inline-flex cursor-default items-center rounded-md border border-gray-300 bg-white p-1 px-2 text-sm text-black">
-                      <img
-                        alt="Check"
-                        class="h-4 w-4 animate-spin"
-                        src={SpinnerIcon}
-                      />
-                      <span className="ml-2">Updating Status..</span>
-                    </button>
-                  )}
-                  {!isUpdatingProgress && progress === 'pending' && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="inline-flex items-center rounded-md border border-green-600 bg-green-600 p-1 px-2 text-sm text-white hover:bg-green-700"
-                        onClick={() => handleUpdateResourceProgress('done')}
-                      >
-                        <img alt="Check" class="w-3" src={CheckIcon} />
-                        <span className="ml-2">Done</span>
-                      </button>
-
-                      <button
-                        className="inline-flex items-center rounded-md bg-[#dad1fd] p-1 px-2 text-sm text-[#0E033B] hover:bg-[#C4B6FC]"
-                        onClick={() => handleUpdateResourceProgress('learning')}
-                      >
-                        <img alt="Learning" class="w-4" src={ProgressIcon} />
-                        <span className="ml-2">In Progress</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {!isUpdatingProgress && progress === 'done' && (
-                    <button
-                      className="inline-flex items-center rounded-md border border-red-600 bg-red-600 p-1 px-2 text-sm text-white hover:bg-red-700"
-                      onClick={() => handleUpdateResourceProgress('pending')}
-                    >
-                      <img alt="Check" class="h-4" src={ResetIcon} />
-                      <span className="ml-2">Pending</span>
-                    </button>
-                  )}
-
-                  {!isUpdatingProgress && progress === 'learning' && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="inline-flex items-center rounded-md border border-green-600 bg-green-600 p-1 px-2 text-sm text-white hover:bg-green-700"
-                        onClick={() => handleUpdateResourceProgress('done')}
-                      >
-                        <img alt="Check" class="w-3" src={CheckIcon} />
-                        <span className="ml-2">Done</span>
-                      </button>
-                      <button
-                        className="inline-flex items-center rounded-md border border-red-600 bg-red-600 p-1 px-2 text-sm text-white hover:bg-red-700"
-                        onClick={() => handleUpdateResourceProgress('pending')}
-                      >
-                        <img alt="Check" class="h-4" src={ResetIcon} />
-                        <span className="ml-2">Pending</span>
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
+              <TopicProgressButton
+                topicId={topicId}
+                resourceId={resourceId}
+                resourceType={resourceType}
+                onShowLoginPopup={showLoginPopup}
+                onClose={() => {
+                  setIsActive(false);
+                  setIsContributing(false);
+                }}
+              />
 
               <button
                 type="button"
                 id="close-topic"
                 className="absolute right-2.5 top-2.5 inline-flex items-center rounded-lg bg-transparent p-1.5 text-sm text-gray-400 hover:bg-gray-200 hover:text-gray-900"
-                onClick={() => setIsActive(false)}
+                onClick={() => {
+                  setIsActive(false);
+                  setIsContributing(false);
+                }}
               >
                 <img alt="Close" class="h-5 w-5" src={CloseIcon} />
               </button>
@@ -311,16 +213,29 @@ export function TopicDetail() {
               dangerouslySetInnerHTML={{ __html: topicHtml }}
             ></div>
 
-            <p
-              id="contrib-meta"
-              class="mt-10 border-t pt-3 text-sm text-gray-400 leading-relaxed"
-            >
-              Contribute links to learning resources about this topic{' '}
-              <a target="_blank" class="text-blue-700 underline" href={contributionUrl}>
-                on GitHub repository.
-              </a>
-              .
-            </p>
+            {/* Contribution */}
+            <div className="mt-8 flex-1 border-t">
+              <p class="mb-2 mt-2 text-sm leading-relaxed text-gray-400">
+                Help others learn by submitting links to learn more about this topic{' '}
+              </p>
+              <button
+                onClick={() => {
+                  if (isGuest) {
+                    setIsActive(false);
+                    showLoginPopup();
+                    return;
+                  }
+
+                  setIsContributing(true);
+                }}
+                disabled={!!contributionAlertMessage}
+                className="block w-full rounded-md bg-gray-800 p-2 text-sm text-white transition-colors hover:bg-black hover:text-white disabled:bg-green-200 disabled:text-black"
+              >
+                {contributionAlertMessage
+                  ? contributionAlertMessage
+                  : 'Submit a Link'}
+              </button>
+            </div>
           </>
         )}
       </div>
